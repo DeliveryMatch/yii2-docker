@@ -9,6 +9,9 @@ COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr
 RUN install-php-extensions \
         intl
 
+# Install required composer dependency manager
+COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
+
 # Environment settings
 ENV PHP_USER_ID=33 \
     PATH=/app:/app/vendor/bin:/root/.composer/vendor/bin:$PATH \
@@ -26,6 +29,29 @@ RUN if command -v a2enmod >/dev/null 2>&1; then \
 RUN mkdir /etc/bash_completion.d && \
     curl -L https://raw.githubusercontent.com/yiisoft/yii2/master/contrib/completion/bash/yii \
          -o /etc/bash_completion.d/yii
+
+# Install extensions that are not installed by default
+RUN apt-get update -y \
+    && apt-get install -y libz-dev libc-client-dev libkrb5-dev libxml2-dev libpng-dev libzip-dev zip locales \
+    && apt-get clean -y
+
+# Install library for writing/reading Excel files
+RUN pecl install xlswriter redis
+
+RUN docker-php-ext-configure ftp --with-openssl-dir=/usr \
+	&& docker-php-ext-install ftp
+
+RUN docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
+    && docker-php-ext-enable xlswriter redis \
+    && docker-php-ext-install -j$(nproc) imap pdo_mysql soap gd zip
+
+# Enable extra locales
+RUN sed -i 's/^# *\(nl_NL.UTF-8\)/\1/' /etc/locale.gen \
+    && sed -i 's/^# *\(de_DE.UTF-8\)/\1/' /etc/locale.gen \
+    && sed -i 's/^# *\(fr_FR.UTF-8\)/\1/' /etc/locale.gen \
+    && sed -i 's/^# *\(es_ES.UTF-8\)/\1/' /etc/locale.gen \
+    && sed -i 's/^# *\(it_IT.UTF-8\)/\1/' /etc/locale.gen \
+    && locale-gen
 
 # Application environment
 WORKDIR /app
